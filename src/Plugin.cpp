@@ -12,7 +12,7 @@ void PluginMain() {
 
 void PluginInit() {
     registerPlugin("iLandHelper", "Helper for iland.",
-                   Version{1, 0, 0, Version::Release}, {{"Author", "Redbeanw"}});
+                   Version{1, 2, 0, Version::Release}, {{"Author", "Redbeanw"}});
     Event::ServerStartedEvent::subscribe([](Event::ServerStartedEvent ev) -> bool {
         PluginMain();
         return true;
@@ -68,20 +68,30 @@ std::optional<vector<string>> ILand::getAABB(BlockSource *region, BlockPos min, 
     }
 }
 
-#include "llapi/mc/SculkCatalystBlockActor.hpp"
-TInstanceHook(void, "?_tryConsumeOnDeathExperience@SculkCatalystBlockActor@@AEAAXAEAVLevel@@AEAVActor@@@Z",
-              SculkCatalystBlockActor, Level * a2, Actor * a3)
+bool isInHandleEventFunction = false;
+TClasslessInstanceHook(void, "?handleGameEvent@SculkCatalystBlockActor@@UEAAXAEBVGameEvent@@AEBUGameEventContext@@AEAVBlockSource@@@Z",
+                       void* a2, void* a3, void* a4)
 {
-    auto region = &a3->getRegion();
-    auto center = a3->getBlockStandingOn().getPosition();
+    isInHandleEventFunction = true;
+    original(this, a2, a3, a4);
+    isInHandleEventFunction = false;
+}
+
+TInstanceHook(int, "?getOnDeathExperience@Actor@@QEAAHXZ",
+              Actor)
+{
+    if (!isInHandleEventFunction)
+        return original(this);
+    auto region = &getRegion();
+    auto center = getBlockStandingOn().getPosition();
     auto currentLand = ILand::getPos(region,center);
     if (!currentLand)
     {
-        auto nearbyLands = ILand::getAABB(region, center - 2,center + 2);
+        auto nearbyLands = ILand::getAABB(region, center - 8,center + 8);
         if (nearbyLands && !nearbyLands->empty())
-            return;
+            return 0;
     }
-    original(this, a2, a3);
+    return original(this);
 }
 
 TClasslessInstanceHook(char, "?onFertilized@MossBlock@@UEBA_NAEAVBlockSource@@AEBVBlockPos@@PEAVActor@@W4FertilizerType@@@Z",
